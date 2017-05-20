@@ -1,0 +1,310 @@
+<html>
+<head>
+<title>Gaario - A simple Agario clone</title>
+<style>
+body {
+padding: 0;
+margin: 0;
+}
+</style>
+</head>
+<body>
+<canvas>
+Awww! Your browser doesn't support canvas.
+</canvas>
+<script>
+var canvas = document.querySelector("canvas");
+var ctx = canvas.getContext("2d");
+var width = innerWidth;
+var height = innerHeight;
+var evt = "mousemove";
+var touchX = 0;
+var touchY = 0;
+var defaultPlayerR = 10;
+var defaultPlayerCol = "white";
+var defaultVirusR = 30;
+var defaultVirusCol = "green";
+var maxSplits = 16;
+var foods = [];
+var viruses = [];
+var clients = [];
+var player = {
+  blobs: [], 
+  lastSplit: 0,
+  extent: {
+    minX: 0,
+    minY: 0, 
+    maxX: 0, 
+    maxY: 0
+  }
+};
+var camera = {
+  x: 0,
+  y: 0
+};
+
+function movePlayer() {
+  for (var i = 0; i < player.blobs.length; i++) {
+    var b = player.blobs[i];
+    var e = player.extent;
+    var x = touchX + camera.x - b.x;
+    var y = touchY + camera.y - b.y;
+    var dist = Math.hypot(x, y)
+    var rNor = defaultPlayerR / b.r;
+
+    b.velocity = {
+      x: x / dist * rNor * b.speed, 
+      y: y / dist * rNor * b.speed
+    };
+
+    b.speed -= b.speed > 4 ? 0.25 : 0;
+    b.speed -= b.speed > 4 ? 0.25 : 0;
+    b.x += b.velocity.x * Math.min(1, Math.pow(x / b.r, 2));
+    b.y += b.velocity.y * Math.min(1, Math.pow(y / b.r, 2));
+    b.x = Math.min(Math.max(b.x, -width), width);
+    b.y = Math.min(Math.max(b.y, -height), height);
+
+    if (i == 0) {
+      e.minX = e.maxX = b.x;
+      e.minY = e.maxY = b.y;
+    } else {
+      e.minX = Math.min(b.x, e.minX);
+      e.minY = Math.min(b.y, e.minY);
+      e.maxX = Math.max(b.x, e.maxX);
+      e.maxY = Math.max(b.y, e.maxY);
+    }
+  }
+}
+
+function handleSelfCollision () {
+	for (var i = 0; i < player.blobs.length; i++) {
+		for (var j = 0; j < player.blobs.length; j++) {
+      if (j !== i && player.blobs[i] !== undefined) {
+        var b1 = player.blobs[i];
+        var b2 = player.blobs[j];
+        var radii = b1.r + b2.r;
+        var x = b2.x - b1.x;
+        var y = b2.y - b1.y;
+        var dist = Math.hypot(x, y);
+
+        if (dist < radii) {
+        	if (player.lastSplit + 5000 > new Date().getTime()) {
+            x /= dist;
+            y /= dist;
+            // test
+            b1.x += ((b2.x - x * radii) - b1.x) * 0.2;
+            b1.y += ((b2.y - y * radii) - b1.y) * 0.2;
+            //test
+        	} else if (dist < radii * 0.50) {
+        		b1.r = b1.r + b2.r;
+        		player.blobs.splice(j, 1);
+        	}
+        }
+      }
+    }
+	}
+}
+
+function handleVirusCollision() {
+  for (var i = 0; i < viruses.length; i ++) {
+    for (var j = 0; j < player.blobs.length; j ++) {
+      var b = player.blobs[j];
+      var v = viruses[i];
+      var x = v.x - b.x;
+      var y = v.y - b.y;
+      var dist = Math.hypot(x, y);
+      var radii = v.r + b.r;
+
+      if (dist < radii) {
+        b.r += v.r;
+        viruses.splice(i, 1);
+        if (player.blobs.length < maxSplits) {
+          while (b.r >= defaultPlayerR * 2) {
+            splitBlob(b);
+          }
+        }
+      }
+    }
+  }
+}
+
+function splitBlob(blob) {
+	if (blob.r >= defaultPlayerR * 2 && player.blobs.length < maxSplits) {
+		blob.r /= 2;
+		player.lastSplit = new Date().getTime();
+		player.blobs.push({
+			x: blob.x,
+			y: blob.y,
+			r: blob.r,
+			speed: 20
+		});
+	}
+}
+
+function moveCamera() {
+  var e = player.extent;
+  camera.x = (e.maxX + e.minX) / 2;
+  camera.y = (e.maxY + e.minY) / 2;
+  camera.x -= width / 2;
+  camera.y -= height / 2;
+}
+
+function random(min, max) {
+  return (min + (Math.random() * (max - min)));
+}
+
+function addFood(num) {
+  while (num--) {
+    foods.push({
+      x: random(-width, width), 
+      y: random(-height, height), 
+      r: random(1, 10), 
+      col: "#fff"
+    });
+  }
+}
+
+function addVirus(num) {
+  while (num--) {
+    viruses.push({
+      x: random(-width, width), 
+      y: random(-height, height), 
+     	r: defaultVirusR
+    });
+  }
+}
+
+function updateFood() {
+  for (var i = 0; i < foods.length; i++) {
+    for (var j = 0; j < player.blobs.length; j++) {
+      var b = player.blobs[j];
+      var f = foods[i];
+      var x = f.x - b.x;
+      var y = f.y - b.y;
+      var dist = Math.hypot(x, y);
+      var radii = f.r + b.r;
+
+      if (dist < radii) {
+        b.r = Math.sqrt(f.r * f.r + b.r * b.r);
+        foods.splice(i, 1);
+
+        break;
+      }
+    }
+  }
+  if (foods.length < 100) {
+    addFood(1);
+  }
+}
+
+function drawPlayer() {
+  for (var i = 0; i < player.blobs.length; i++) {
+    var b = player.blobs[i];
+
+    ctx.fillStyle = defaultPlayerCol;
+    ctx.beginPath();
+    ctx.arc(b.x - camera.x, b.y - camera.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+function drawFood() {
+  for (var i = 0; i < foods.length; i++) {
+    var f = foods[i];
+
+    ctx.fillStyle = f.col;
+    ctx.beginPath();
+    ctx.arc(f.x - camera.x, f.y - camera.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+function drawVirus() {
+  for (var i = 0; i < viruses.length; i++) {
+    var v = viruses[i];
+
+    ctx.fillStyle = defaultVirusCol;
+    ctx.beginPath();
+    ctx.arc(v.x - camera.x, v.y - camera.y, v.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+function drawPlatform(bgcol, borcol, thickness) {
+  var x = -width - camera.x;
+  var y = -height - camera.y;
+  var w = 2 * width;
+  var h = 2 * height;
+
+  ctx.fillStyle = bgcol;
+  ctx.fillRect(x, y, w, h);
+  ctx.lineWidth = thickness;
+  ctx.strokeStyle = borcol;
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawBackground(col) {
+  ctx.fillStyle = col;
+  ctx.fillRect(0, 0, width, height);
+}
+
+function updateAndDraw() {
+  movePlayer();
+  moveCamera();
+  updateFood();
+  handleSelfCollision();
+  //handleVirusCollision();
+
+  drawBackground("#3399aa");
+  drawPlatform("#222", "#000", 10);
+  drawFood();
+  drawPlayer();
+  drawVirus();
+
+  requestAnimationFrame(updateAndDraw);
+}
+
+function handleEvent(event) {
+  touchX = event.clientX;
+  touchY = event.clientY;
+}
+
+function startTheGame() {
+	evt = width < 600 ? "click" : "mousemove";
+  canvas.width = width;
+  canvas.height = height;
+
+  addFood(100);
+  addVirus(5);
+  player.blobs.push({
+    x: width/2, 
+    y: height/2,
+    r: 60,
+    speed: 8
+  });
+
+  //test
+  canvas.addEventListener("click", function () {
+  	var blobs = player.blobs.length;
+  	for (var i = 0; i < blobs; i ++) {
+  		if (blobs < maxSplits) {
+  			splitBlob(player.blobs[i]);
+  		} else {
+  			break;
+  		}
+  	}
+  });
+  // test
+  canvas.addEventListener(evt, handleEvent);
+  updateAndDraw();
+}
+
+
+  startTheGame();
+
+</script>
+</body>
+</html>
